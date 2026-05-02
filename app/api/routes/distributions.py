@@ -4,20 +4,35 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep
-from app.config import settings
+from app.models.attachment import Attachment
 from app.models.distribution import Distribution
 from app.schemas.distribution import DistributionResponse
+from app.services.blob_storage import blob_storage_service
 
 router = APIRouter(prefix="/distributions", tags=["distributions"])
 
 
-async def _save_upload(upload: UploadFile) -> str:
-    ext = upload.filename.rsplit(".", 1)[-1] if upload.filename and "." in upload.filename else "jpg"
-    filename = f"{uuid.uuid4()}.{ext}"
-    dest = settings.upload_path / filename
-    content = await upload.read()
-    dest.write_bytes(content)
-    return f"/uploads/{filename}"
+async def _upload_and_track(
+    upload: UploadFile,
+    session: SessionDep,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    field_name: str,
+) -> str:
+    blob_name, blob_url, size_bytes = await blob_storage_service.upload(upload)
+
+    attachment = Attachment(
+        blob_name=blob_name,
+        blob_url=blob_url,
+        original_filename=upload.filename,
+        content_type=upload.content_type,
+        size_bytes=size_bytes,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        field_name=field_name,
+    )
+    session.add(attachment)
+    return blob_url
 
 
 @router.post("/", response_model=DistributionResponse, status_code=status.HTTP_201_CREATED)
@@ -33,14 +48,6 @@ async def create_distribution(
     water_bowl_photo: UploadFile | None = File(None),
     owner_photo: UploadFile | None = File(None),
 ) -> Distribution:
-    water_bowl_path: str | None = None
-    owner_photo_path: str | None = None
-
-    if water_bowl_photo and water_bowl_photo.filename:
-        water_bowl_path = await _save_upload(water_bowl_photo)
-    if owner_photo and owner_photo.filename:
-        owner_photo_path = await _save_upload(owner_photo)
-
     dist = Distribution(
         drive_id=drive_id,
         name=name,
@@ -49,10 +56,21 @@ async def create_distribution(
         address=address,
         latitude=latitude,
         longitude=longitude,
-        water_bowl_photo=water_bowl_path,
-        owner_photo=owner_photo_path,
     )
     session.add(dist)
+    await session.flush()
+    await session.refresh(dist)
+
+    if water_bowl_photo and water_bowl_photo.filename:
+        dist.water_bowl_photo = await _upload_and_track(
+            water_bowl_photo, session, "distribution", dist.id, "water_bowl_photo"
+        )
+
+    if owner_photo and owner_photo.filename:
+        dist.owner_photo = await _upload_and_track(
+            owner_photo, session, "distribution", dist.id, "owner_photo"
+        )
+
     await session.flush()
     await session.refresh(dist)
     return dist

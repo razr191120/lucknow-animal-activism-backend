@@ -43,16 +43,16 @@ jobs:
         with:
           name: backend-image
 
-      - name: Deploy to VM via SSH
+      - name: Deploy to Azure VM via SSH
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          source: "backend-image.tar.gz,docker-compose.yml"
+          source: "backend-image.tar.gz"
           target: /home/${{ secrets.VM_USER }}/lucknow-deploy/backend
 
-      - name: Start containers on VM
+      - name: Start container on Azure VM
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_HOST }}
@@ -61,15 +61,16 @@ jobs:
           script: |
             cd /home/${{ secrets.VM_USER }}/lucknow-deploy/backend
             docker load < backend-image.tar.gz
+            docker network create lucknow-network 2>/dev/null || true
             docker stop ${{ env.CONTAINER_NAME }} || true
             docker rm ${{ env.CONTAINER_NAME }} || true
             docker run -d \
               --name ${{ env.CONTAINER_NAME }} \
               --restart unless-stopped \
               -p 8000:8000 \
-              -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
-              -e UPLOAD_DIR=/app/uploads \
-              -v lucknow-uploads:/app/uploads \
+              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              -e AZURE_STORAGE_CONNECTION_STRING="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
+              -e AZURE_STORAGE_CONTAINER_NAME="${{ secrets.AZURE_STORAGE_CONTAINER_NAME }}" \
               --network lucknow-network \
               ${{ env.IMAGE_NAME }}:latest
             rm -f backend-image.tar.gz
