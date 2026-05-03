@@ -1,7 +1,9 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import AdminUser, SessionDep
 from app.models.attachment import Attachment
@@ -16,6 +18,8 @@ from app.schemas.user import (
 )
 from app.services.auth import hash_password
 from app.services.blob_storage import blob_storage_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -47,16 +51,31 @@ async def create_user(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    user = User(
-        email=data.email.lower(),
-        full_name=data.full_name,
-        hashed_password=hash_password(data.password),
-        role="member",
-    )
-    session.add(user)
-    await session.flush()
-    await session.refresh(user)
-    return user
+    try:
+        password_hash = hash_password(data.password)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid password",
+        ) from e
+
+    try:
+        user = User(
+            email=data.email.lower(),
+            full_name=data.full_name,
+            hashed_password=password_hash,
+            role="member",
+        )
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+        return user
+    except SQLAlchemyError:
+        logger.exception("Database error creating user")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from None
 
 
 @router.get("/users/{user_id}", response_model=UserResponse)
@@ -106,7 +125,13 @@ async def reset_user_password(
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    user.hashed_password = hash_password(data.new_password)
+    try:
+        user.hashed_password = hash_password(data.new_password)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid password",
+        ) from e
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
