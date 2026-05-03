@@ -5,7 +5,16 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import admin, attachments, auth, distributions, drives, geocoding, stats
+from app.api.routes import (
+    admin,
+    attachments,
+    auth,
+    distributions,
+    drives,
+    geocoding,
+    laap,
+    stats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +50,7 @@ app.include_router(distributions.router, prefix=API_PREFIX)
 app.include_router(geocoding.router, prefix=API_PREFIX)
 app.include_router(stats.router, prefix=API_PREFIX)
 app.include_router(attachments.router, prefix=API_PREFIX)
+app.include_router(laap.router, prefix=API_PREFIX)
 app.include_router(admin.router, prefix=API_PREFIX)
 
 

@@ -19,6 +19,12 @@ class User(Base):
     )
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(500), nullable=False)
+    aadhaar_number: Mapped[str | None] = mapped_column(
+        String(12), nullable=True, unique=True, index=True
+    )
+    pan_number: Mapped[str | None] = mapped_column(
+        String(10), nullable=True, unique=True, index=True
+    )
     role: Mapped[str] = mapped_column(
         String(20), nullable=False, default="member"
     )
