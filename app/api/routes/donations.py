@@ -4,7 +4,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func as sqlfunc, select
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.models.donation import DonationRecord
 from app.schemas.donation import DonationCreate, DonationResponse, DonationStatsResponse
 
@@ -20,7 +20,7 @@ def _generate_receipt() -> str:
 async def record_donation(
     data: DonationCreate,
     session: SessionDep,
-    current_user: CurrentUser,
+    admin: AdminUser,
 ) -> DonationRecord:
     record = DonationRecord(
         donor_name=data.donor_name,
@@ -31,7 +31,7 @@ async def record_donation(
         payment_mode=data.payment_mode,
         receipt_number=_generate_receipt(),
         campaign_id=data.campaign_id,
-        recorded_by=current_user.id,
+        recorded_by=admin.id,
         date=data.date,
         notes=data.notes,
     )
@@ -44,6 +44,7 @@ async def record_donation(
 @router.get("/", response_model=list[DonationResponse])
 async def list_donations(
     session: SessionDep,
+    admin: AdminUser,
     skip: int = 0,
     limit: int = 100,
 ) -> list[DonationRecord]:

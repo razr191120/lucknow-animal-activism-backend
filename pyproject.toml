@@ -20,6 +20,7 @@ dependencies = [
     "pyjwt[crypto]>=2.9.0",
     "bcrypt>=4.1.0",
     "email-validator>=2.0.0",
+    "google-auth>=2.35.0",
 ]
 
 [tool.hatch.build.targets.wheel]

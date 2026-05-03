@@ -2,6 +2,7 @@ from app.models.adoption_application import AdoptionApplication
 from app.models.attachment import Attachment
 from app.models.distribution import Distribution
 from app.models.donation import DonationRecord
+from app.models.donation_pledge import DonationPledge
 from app.models.drive import Drive, DriveAddress
 from app.models.laap import (
     LaapAdoptionRequest,
@@ -17,6 +18,7 @@ __all__ = [
     "Attachment",
     "Distribution",
     "DonationRecord",
+    "DonationPledge",
     "Drive",
     "DriveAddress",
     "LaapAdoptionRequest",

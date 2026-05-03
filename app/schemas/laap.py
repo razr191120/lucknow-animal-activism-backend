@@ -83,3 +83,18 @@ class LaapDonationUpdate(BaseModel):
     bank_account_hint: str | None = None
     target_amount_inr: Decimal | None = None
     status: str | None = Field(None, pattern="^(open|fulfilled|withdrawn)$")
+
+
+class DonationPledgeCreate(BaseModel):
+    amount_inr: Decimal | None = Field(None, gt=0)
+    message: str | None = None
+
+
+class DonationPledgeResponse(BaseModel):
+    id: uuid.UUID
+    donation_request_id: uuid.UUID
+    user_id: uuid.UUID
+    supporter_full_name: str | None = None
+    amount_inr: Decimal | None = None
+    message: str | None = None
+    created_at: datetime.datetime

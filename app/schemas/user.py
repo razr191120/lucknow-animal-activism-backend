@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import datetime
 import re
 import uuid
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class UserCreate(BaseModel):
@@ -69,3 +71,24 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class OAuthGoogleBody(BaseModel):
+    id_token: str = Field(..., min_length=10)
+
+
+class OAuthFacebookBody(BaseModel):
+    access_token: str = Field(..., min_length=10)
+
+
+class OAuthInstagramBody(BaseModel):
+    """Instagram Basic Display: exchange `code` from redirect, or pass `access_token`."""
+
+    code: str | None = Field(None, min_length=2)
+    access_token: str | None = Field(None, min_length=10)
+
+    @model_validator(mode="after")
+    def one_of(self) -> OAuthInstagramBody:
+        if not self.code and not self.access_token:
+            raise ValueError("Provide either code or access_token")
+        return self

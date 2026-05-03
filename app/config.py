@@ -69,6 +69,14 @@ class Settings(BaseSettings):
 
     JWT_SECRET: str = "change-me-in-production"
 
+    # OAuth (optional — leave empty to disable each provider)
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    FACEBOOK_APP_ID: str = ""
+    FACEBOOK_APP_SECRET: str = ""
+    INSTAGRAM_CLIENT_ID: str = ""
+    INSTAGRAM_CLIENT_SECRET: str = ""
+    INSTAGRAM_REDIRECT_URI: str = ""
+
 
 def _build_settings() -> Settings:
     """Build settings, overlaying Key Vault secrets if vault URL is configured."""

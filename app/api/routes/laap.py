@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.models.adoption_application import AdoptionApplication
 from app.models.attachment import Attachment
+from app.models.donation_pledge import DonationPledge
 from app.models.laap import LaapAdoptionRequest, LaapDonationRequest, LaapRescueRequest
 from app.models.rescue_assignment import RescueAssignment
 from app.models.user import User
@@ -18,6 +19,8 @@ from app.schemas.adoption_application import (
     ApplicationUpdate,
 )
 from app.schemas.laap import (
+    DonationPledgeCreate,
+    DonationPledgeResponse,
     LaapAdoptionResponse,
     LaapAdoptionUpdate,
     LaapDonationResponse,
@@ -641,6 +644,78 @@ async def update_donation_request(
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+# ── Donation pledges (supporters respond to a donation request) ─────────────
+
+
+@router.post(
+    "/donations/{donation_id}/pledges",
+    response_model=DonationPledgeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_donation_pledge(
+    donation_id: uuid.UUID,
+    data: DonationPledgeCreate,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> DonationPledgeResponse:
+    row = await session.get(LaapDonationRequest, donation_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Donation request not found")
+    if row.status != "open":
+        raise HTTPException(status_code=400, detail="This donation request is not open")
+
+    pledge = DonationPledge(
+        donation_request_id=donation_id,
+        user_id=current_user.id,
+        amount_inr=data.amount_inr,
+        message=data.message,
+    )
+    session.add(pledge)
+    await session.flush()
+    await session.refresh(pledge)
+    return DonationPledgeResponse(
+        id=pledge.id,
+        donation_request_id=pledge.donation_request_id,
+        user_id=pledge.user_id,
+        supporter_full_name=current_user.full_name,
+        amount_inr=pledge.amount_inr,
+        message=pledge.message,
+        created_at=pledge.created_at,
+    )
+
+
+@router.get(
+    "/donations/{donation_id}/pledges",
+    response_model=list[DonationPledgeResponse],
+)
+async def list_donation_pledges(
+    donation_id: uuid.UUID,
+    session: SessionDep,
+) -> list[DonationPledgeResponse]:
+    row = await session.get(LaapDonationRequest, donation_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Donation request not found")
+
+    result = await session.execute(
+        select(DonationPledge, User.full_name)
+        .join(User, User.id == DonationPledge.user_id)
+        .where(DonationPledge.donation_request_id == donation_id)
+        .order_by(DonationPledge.created_at.desc())
+    )
+    return [
+        DonationPledgeResponse(
+            id=p.id,
+            donation_request_id=p.donation_request_id,
+            user_id=p.user_id,
+            supporter_full_name=name,
+            amount_inr=p.amount_inr,
+            message=p.message,
+            created_at=p.created_at,
+        )
+        for p, name in result.all()
+    ]
 
 
 # ── Adoption Applications ──────────────────────────────────────────────────

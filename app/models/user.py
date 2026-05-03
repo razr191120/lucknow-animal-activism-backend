@@ -18,7 +18,9 @@ class User(Base):
         String(255), unique=True, nullable=False, index=True
     )
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(500), nullable=False)
+    hashed_password: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    oauth_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    oauth_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
     aadhaar_number: Mapped[str | None] = mapped_column(
         String(12), nullable=True, unique=True, index=True
     )
