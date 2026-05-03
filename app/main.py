@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import attachments, distributions, drives, geocoding, stats
+from app.api.routes import admin, attachments, auth, distributions, drives, geocoding, stats
 
 app = FastAPI(
     title="Lucknow Water Bowl Distribution API",
@@ -19,11 +19,13 @@ app.add_middleware(
 
 API_PREFIX = "/api/v1"
 
+app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(drives.router, prefix=API_PREFIX)
 app.include_router(distributions.router, prefix=API_PREFIX)
 app.include_router(geocoding.router, prefix=API_PREFIX)
 app.include_router(stats.router, prefix=API_PREFIX)
 app.include_router(attachments.router, prefix=API_PREFIX)
+app.include_router(admin.router, prefix=API_PREFIX)
 
 
 @app.get("/health", tags=["health"])

@@ -24,6 +24,7 @@ def _load_keyvault_secrets(vault_url: str) -> dict[str, str]:
             "DATABASE-URL",
             "AZURE-STORAGE-CONNECTION-STRING",
             "AZURE-STORAGE-CONTAINER-NAME",
+            "JWT-SECRET",
         ]
 
         secrets: dict[str, str] = {}
@@ -66,6 +67,8 @@ class Settings(BaseSettings):
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER_NAME: str = "uploads"
 
+    JWT_SECRET: str = "change-me-in-production"
+
 
 def _build_settings() -> Settings:
     """Build settings, overlaying Key Vault secrets if vault URL is configured."""
@@ -90,6 +93,8 @@ def _build_settings() -> Settings:
         overrides["AZURE_STORAGE_CONTAINER_NAME"] = kv_secrets[
             "AZURE_STORAGE_CONTAINER_NAME"
         ]
+    if "JWT_SECRET" in kv_secrets:
+        overrides["JWT_SECRET"] = kv_secrets["JWT_SECRET"]
 
     if overrides:
         return Settings(**overrides)
