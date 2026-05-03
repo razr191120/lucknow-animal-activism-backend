@@ -61,8 +61,23 @@ class OptimizeRouteResponse(BaseModel):
 
 
 class StatsResponse(BaseModel):
+    # Water bowl
     total_distributions: int
     total_drives: int
     drives_completed: int
     drives_planned: int
     unique_addresses: int
+    # Rescue
+    total_rescues: int = 0
+    open_rescues: int = 0
+    resolved_rescues: int = 0
+    # Adoption
+    total_adoptions: int = 0
+    open_adoptions: int = 0
+    fulfilled_adoptions: int = 0
+    # Donations
+    total_donations_inr: float = 0.0
+    donation_count: int = 0
+    # Volunteers
+    total_volunteers: int = 0
+    active_volunteers: int = 0

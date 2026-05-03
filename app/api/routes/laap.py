@@ -5,10 +5,18 @@ from typing import Sequence
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AdminUser, CurrentUser, SessionDep
+from app.models.adoption_application import AdoptionApplication
 from app.models.attachment import Attachment
 from app.models.laap import LaapAdoptionRequest, LaapDonationRequest, LaapRescueRequest
+from app.models.rescue_assignment import RescueAssignment
 from app.models.user import User
+from app.models.volunteer import Volunteer
+from app.schemas.adoption_application import (
+    ApplicationCreate,
+    ApplicationResponse,
+    ApplicationUpdate,
+)
 from app.schemas.laap import (
     LaapAdoptionResponse,
     LaapAdoptionUpdate,
@@ -16,6 +24,11 @@ from app.schemas.laap import (
     LaapDonationUpdate,
     LaapRescueResponse,
     LaapRescueUpdate,
+)
+from app.schemas.rescue_assignment import (
+    AssignmentCreate,
+    AssignmentResponse,
+    AssignmentUpdate,
 )
 from app.services.blob_storage import blob_storage_service
 
@@ -628,3 +641,243 @@ async def update_donation_request(
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+# ── Adoption Applications ──────────────────────────────────────────────────
+
+
+@router.post(
+    "/adoptions/{adoption_id}/apply",
+    response_model=ApplicationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def apply_to_adopt(
+    adoption_id: uuid.UUID,
+    data: ApplicationCreate,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> AdoptionApplication:
+    listing = await session.get(LaapAdoptionRequest, adoption_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail="Adoption listing not found")
+    if listing.status != "open":
+        raise HTTPException(status_code=400, detail="Listing is not open for applications")
+
+    existing = await session.execute(
+        select(AdoptionApplication).where(
+            AdoptionApplication.adoption_id == adoption_id,
+            AdoptionApplication.applicant_id == current_user.id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Already applied")
+
+    app = AdoptionApplication(
+        adoption_id=adoption_id,
+        applicant_id=current_user.id,
+        applicant_name=data.applicant_name,
+        applicant_phone=data.applicant_phone,
+        applicant_address=data.applicant_address,
+        why_adopt=data.why_adopt,
+        has_experience=data.has_experience,
+        living_situation=data.living_situation,
+    )
+    session.add(app)
+    await session.flush()
+    await session.refresh(app)
+    return app
+
+
+@router.get(
+    "/adoptions/{adoption_id}/applications",
+    response_model=list[ApplicationResponse],
+)
+async def list_applications(
+    adoption_id: uuid.UUID,
+    session: SessionDep,
+) -> list[AdoptionApplication]:
+    result = await session.execute(
+        select(AdoptionApplication)
+        .where(AdoptionApplication.adoption_id == adoption_id)
+        .order_by(AdoptionApplication.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.get("/applications/mine", response_model=list[ApplicationResponse])
+async def my_applications(
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> list[AdoptionApplication]:
+    result = await session.execute(
+        select(AdoptionApplication)
+        .where(AdoptionApplication.applicant_id == current_user.id)
+        .order_by(AdoptionApplication.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.patch(
+    "/applications/{app_id}",
+    response_model=ApplicationResponse,
+)
+async def review_application(
+    app_id: uuid.UUID,
+    data: ApplicationUpdate,
+    session: SessionDep,
+    admin: AdminUser,
+) -> AdoptionApplication:
+    result = await session.execute(
+        select(AdoptionApplication).where(AdoptionApplication.id == app_id)
+    )
+    app = result.scalar_one_or_none()
+    if app is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(app, k, v)
+    await session.flush()
+    await session.refresh(app)
+    return app
+
+
+# ── Rescue Assignments ──────────────────────────────────────────────────────
+
+
+@router.post(
+    "/rescues/{rescue_id}/assign",
+    response_model=AssignmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def assign_volunteer(
+    rescue_id: uuid.UUID,
+    data: AssignmentCreate,
+    session: SessionDep,
+    admin: AdminUser,
+) -> AssignmentResponse:
+    rescue = await session.get(LaapRescueRequest, rescue_id)
+    if rescue is None:
+        raise HTTPException(status_code=404, detail="Rescue not found")
+
+    vol = await session.get(Volunteer, data.volunteer_id)
+    if vol is None:
+        raise HTTPException(status_code=404, detail="Volunteer not found")
+    vol_user = await session.get(User, vol.user_id)
+
+    assignment = RescueAssignment(
+        rescue_id=rescue_id,
+        volunteer_id=data.volunteer_id,
+        assigned_by=admin.id,
+        notes=data.notes,
+    )
+    session.add(assignment)
+    await session.flush()
+    await session.refresh(assignment)
+    return AssignmentResponse(
+        id=assignment.id,
+        rescue_id=assignment.rescue_id,
+        volunteer_id=assignment.volunteer_id,
+        volunteer_name=vol_user.full_name if vol_user else None,
+        assigned_by=assignment.assigned_by,
+        status=assignment.status,
+        notes=assignment.notes,
+        created_at=assignment.created_at,
+        updated_at=assignment.updated_at,
+    )
+
+
+@router.get(
+    "/rescues/{rescue_id}/assignments",
+    response_model=list[AssignmentResponse],
+)
+async def list_rescue_assignments(
+    rescue_id: uuid.UUID,
+    session: SessionDep,
+) -> list[AssignmentResponse]:
+    result = await session.execute(
+        select(RescueAssignment, User.full_name)
+        .join(Volunteer, Volunteer.id == RescueAssignment.volunteer_id)
+        .join(User, User.id == Volunteer.user_id)
+        .where(RescueAssignment.rescue_id == rescue_id)
+        .order_by(RescueAssignment.created_at.desc())
+    )
+    return [
+        AssignmentResponse(
+            id=a.id,
+            rescue_id=a.rescue_id,
+            volunteer_id=a.volunteer_id,
+            volunteer_name=name,
+            assigned_by=a.assigned_by,
+            status=a.status,
+            notes=a.notes,
+            created_at=a.created_at,
+            updated_at=a.updated_at,
+        )
+        for a, name in result.all()
+    ]
+
+
+@router.patch(
+    "/assignments/{assignment_id}",
+    response_model=AssignmentResponse,
+)
+async def update_assignment(
+    assignment_id: uuid.UUID,
+    data: AssignmentUpdate,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> AssignmentResponse:
+    result = await session.execute(
+        select(RescueAssignment).where(RescueAssignment.id == assignment_id)
+    )
+    assignment = result.scalar_one_or_none()
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(assignment, k, v)
+    await session.flush()
+    await session.refresh(assignment)
+
+    vol = await session.get(Volunteer, assignment.volunteer_id)
+    vol_user = await session.get(User, vol.user_id) if vol else None
+    return AssignmentResponse(
+        id=assignment.id,
+        rescue_id=assignment.rescue_id,
+        volunteer_id=assignment.volunteer_id,
+        volunteer_name=vol_user.full_name if vol_user else None,
+        assigned_by=assignment.assigned_by,
+        status=assignment.status,
+        notes=assignment.notes,
+        created_at=assignment.created_at,
+        updated_at=assignment.updated_at,
+    )
+
+
+@router.post(
+    "/rescues/{rescue_id}/follow-up-photos",
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_follow_up_photos(
+    rescue_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser,
+    image_0: UploadFile | None = File(None),
+    image_1: UploadFile | None = File(None),
+    image_2: UploadFile | None = File(None),
+    image_3: UploadFile | None = File(None),
+    image_4: UploadFile | None = File(None),
+) -> dict:
+    rescue = await session.get(LaapRescueRequest, rescue_id)
+    if rescue is None:
+        raise HTTPException(status_code=404, detail="Rescue not found")
+
+    uploads = _gather_files(image_0, image_1, image_2, image_3, image_4)
+    if not uploads:
+        raise HTTPException(status_code=400, detail="No photos provided")
+
+    await _upload_images(
+        session, uploads, ET_RESCUE, rescue_id, str(current_user.id)
+    )
+    await session.flush()
+    urls = await _photo_urls(session, ET_RESCUE, rescue_id)
+    return {"photo_urls": urls}

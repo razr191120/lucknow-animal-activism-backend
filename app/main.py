@@ -10,10 +10,12 @@ from app.api.routes import (
     attachments,
     auth,
     distributions,
+    donations,
     drives,
     geocoding,
     laap,
     stats,
+    volunteers,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,8 @@ app.include_router(geocoding.router, prefix=API_PREFIX)
 app.include_router(stats.router, prefix=API_PREFIX)
 app.include_router(attachments.router, prefix=API_PREFIX)
 app.include_router(laap.router, prefix=API_PREFIX)
+app.include_router(volunteers.router, prefix=API_PREFIX)
+app.include_router(donations.router, prefix=API_PREFIX)
 app.include_router(admin.router, prefix=API_PREFIX)
 
 
