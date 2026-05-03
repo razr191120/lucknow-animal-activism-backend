@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import datetime
 import uuid
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class LaapAdoptionResponse(BaseModel):
@@ -88,6 +90,14 @@ class LaapDonationUpdate(BaseModel):
 class DonationPledgeCreate(BaseModel):
     amount_inr: Decimal | None = Field(None, gt=0)
     message: str | None = None
+
+    @model_validator(mode="after")
+    def need_amount_or_message(self) -> DonationPledgeCreate:
+        has_amt = self.amount_inr is not None
+        has_msg = self.message is not None and str(self.message).strip() != ""
+        if not has_amt and not has_msg:
+            raise ValueError("Provide an amount and/or a message for your pledge")
+        return self
 
 
 class DonationPledgeResponse(BaseModel):
