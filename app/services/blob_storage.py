@@ -32,9 +32,7 @@ class BlobStorageService:
                 self.container_name
             )
             if not container_client.exists():
-                self.client.create_container(
-                    self.container_name, public_access="blob"
-                )
+                self.client.create_container(self.container_name)
         except Exception:
             logger.exception("Failed to ensure blob container exists")
 
