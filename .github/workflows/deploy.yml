@@ -68,9 +68,7 @@ jobs:
               --name ${{ env.CONTAINER_NAME }} \
               --restart unless-stopped \
               -p 8000:8000 \
-              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-              -e AZURE_STORAGE_CONNECTION_STRING="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
-              -e AZURE_STORAGE_CONTAINER_NAME="${{ secrets.AZURE_STORAGE_CONTAINER_NAME }}" \
+              -e AZURE_KEY_VAULT_URL="${{ secrets.AZURE_KEY_VAULT_URL }}" \
               --network lucknow-network \
               ${{ env.IMAGE_NAME }}:latest
             rm -f backend-image.tar.gz
